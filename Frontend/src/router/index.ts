@@ -1,13 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
-// import HomeView from '../views/HomeView.vue'
+import Login from '@/views/Login.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/', redirect: '/login' },
     { path: '/login', component: Login },
-    { path: '/register', component: Register },
-    { path: '/welcome', component: Welcome, meta: { requiresAuth: true } },
+    // { path: '/register', component: Register },
+    // { path: '/welcome', component: Welcome, meta: { requiresAuth: true } },
   ],
 })
 
