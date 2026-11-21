@@ -7,7 +7,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/joho/godotenv"
 	"github.com/thanunbenz/login_with_go_vue/backend/internal/config"
 	"github.com/thanunbenz/login_with_go_vue/backend/internal/database"
 	"github.com/thanunbenz/login_with_go_vue/backend/internal/handler"
@@ -23,11 +22,6 @@ func main() {
 	})
 	app.Use(cors.New())
 	ctx := context.Background()
-	err := godotenv.Load()
-
-	if err != nil {
-		panic("Error loading .env file")
-	}
 	pool, err := database.Connect(ctx, cfg.DBURL)
 	if err != nil {
 		log.Fatal("db connect: ", err)
