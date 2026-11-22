@@ -13,4 +13,3 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS refresh_tokens_expires_at_idx ON refresh_tokens(expires_at);
