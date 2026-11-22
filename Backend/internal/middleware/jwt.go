@@ -23,6 +23,9 @@ func JWT(secret string) fiber.Handler {
 		}
 
 		claims := token.Claims.(jwt.MapClaims)
+		if claims["type"] != "access" {
+			return fiber.NewError(fiber.StatusUnauthorized, "invalid token")
+		}
 		c.Locals("username", claims["username"])
 		return c.Next()
 	}

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { api, errMsg } from '../api'
+import { api, errMsg, setAccessToken } from '../api'
 
 const router = useRouter()
 const username = ref('')
@@ -15,7 +15,7 @@ async function submit() {
       username: username.value,
       password: password.value,
     })
-    localStorage.setItem('token', data.token)
+    setAccessToken(data.token)
     router.push('/welcome')
   } catch (e) {
     error.value = errMsg(e)

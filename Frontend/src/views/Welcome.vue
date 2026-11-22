@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../api'
+import { api, clearAccessToken } from '../api'
 
 const router = useRouter()
 const username = ref('')
 
-function logout() {
-  localStorage.removeItem('token')
+async function logout() {
+  await api.post('/logout').catch(() => undefined)
+  clearAccessToken()
   router.push('/login')
 }
 
@@ -16,7 +17,7 @@ onMounted(async () => {
     const { data } = await api.get('/me')
     username.value = data.username
   } catch {
-    logout()
+    await logout()
   }
 })
 </script>
