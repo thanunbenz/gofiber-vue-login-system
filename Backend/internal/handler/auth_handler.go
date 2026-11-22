@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/thanunbenz/login_with_go_vue/backend/internal/repository"
 	"github.com/thanunbenz/login_with_go_vue/backend/internal/service"
@@ -11,11 +12,12 @@ import (
 )
 
 type AuthHandler struct {
-	svc *service.AuthService
+	svc          *service.AuthService
+	cookieSecure bool
 }
 
-func NewAuthHandler(svc *service.AuthService) *AuthHandler {
-	return &AuthHandler{svc: svc}
+func NewAuthHandler(svc *service.AuthService, cookieSecure bool) *AuthHandler {
+	return &AuthHandler{svc: svc, cookieSecure: cookieSecure}
 }
 
 type registerReq struct {
@@ -61,14 +63,40 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
 	}
 
-	token, err := h.svc.Login(c.UserContext(), strings.TrimSpace(req.Username), req.Password)
+	accessToken, refreshToken, err := h.svc.Login(c.UserContext(), strings.TrimSpace(req.Username), req.Password)
 	if err != nil {
 		if errors.Is(err, service.ErrUserPassword) {
 			return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 		}
 		return err
 	}
-	return c.JSON(fiber.Map{"token": token})
+	h.setRefreshCookie(c, refreshToken, time.Now().Add(12*time.Hour))
+	return c.JSON(fiber.Map{"token": accessToken})
+}
+
+func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
+	accessToken, err := h.svc.Refresh(c.Cookies("refresh_token"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "invalid refresh token")
+	}
+	return c.JSON(fiber.Map{"token": accessToken})
+}
+
+func (h *AuthHandler) Logout(c *fiber.Ctx) error {
+	h.setRefreshCookie(c, "", time.Unix(0, 0))
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (h *AuthHandler) setRefreshCookie(c *fiber.Ctx, value string, expires time.Time) {
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    value,
+		Path:     "/",
+		Expires:  expires,
+		HTTPOnly: true,
+		Secure:   h.cookieSecure,
+		SameSite: fiber.CookieSameSiteLaxMode,
+	})
 }
 
 func (h *AuthHandler) Me(c *fiber.Ctx) error {

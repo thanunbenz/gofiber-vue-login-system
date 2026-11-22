@@ -20,7 +20,11 @@ func main() {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: handler.ErrorHandler,
 	})
-	app.Use(cors.New())
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     "http://localhost:5173",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+		AllowCredentials: true,
+	}))
 	ctx := context.Background()
 	pool, err := database.Connect(ctx, cfg.DBURL)
 	if err != nil {
@@ -30,7 +34,7 @@ func main() {
 
 	repo := repository.NewUserRepo(pool)
 	svc := service.NewAuthService(repo, cfg.JWT_SECRET)
-	h := handler.NewAuthHandler(svc)
+	h := handler.NewAuthHandler(svc, cfg.CookieSecure)
 
 	api := app.Group("/api")
 	v1 := api.Group("/v1")
@@ -39,6 +43,8 @@ func main() {
 	})
 	v1.Post("/register", h.Register)
 	v1.Post("/login", h.Login)
+	v1.Post("/refresh", h.Refresh)
+	v1.Post("/logout", h.Logout)
 	v1.Get("/me", middleware.JWT(cfg.JWT_SECRET), h.Me)
 
 	port := os.Getenv("PORT")
