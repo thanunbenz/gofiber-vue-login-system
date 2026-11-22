@@ -75,21 +75,28 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
-	accessToken, err := h.svc.Refresh(c.Cookies("refresh_token"))
+	accessToken, refreshToken, err := h.svc.Refresh(c.UserContext(), c.Cookies(h.refreshCookieName()))
 	if err != nil {
-		return fiber.NewError(fiber.StatusUnauthorized, "invalid refresh token")
+		if errors.Is(err, service.ErrInvalidRefreshToken) {
+			return fiber.NewError(fiber.StatusUnauthorized, "invalid refresh token")
+		}
+		return err
 	}
+	h.setRefreshCookie(c, refreshToken, time.Now().Add(12*time.Hour))
 	return c.JSON(fiber.Map{"token": accessToken})
 }
 
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
+	if err := h.svc.Logout(c.UserContext(), c.Cookies(h.refreshCookieName())); err != nil {
+		return err
+	}
 	h.setRefreshCookie(c, "", time.Unix(0, 0))
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (h *AuthHandler) setRefreshCookie(c *fiber.Ctx, value string, expires time.Time) {
 	c.Cookie(&fiber.Cookie{
-		Name:     "refresh_token",
+		Name:     h.refreshCookieName(),
 		Value:    value,
 		Path:     "/",
 		Expires:  expires,
@@ -97,6 +104,13 @@ func (h *AuthHandler) setRefreshCookie(c *fiber.Ctx, value string, expires time.
 		Secure:   h.cookieSecure,
 		SameSite: fiber.CookieSameSiteLaxMode,
 	})
+}
+
+func (h *AuthHandler) refreshCookieName() string {
+	if h.cookieSecure {
+		return "__Host-refresh_token"
+	}
+	return "refresh_token"
 }
 
 func (h *AuthHandler) Me(c *fiber.Ctx) error {

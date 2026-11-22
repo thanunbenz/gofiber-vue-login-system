@@ -11,6 +11,7 @@ type Config struct {
 	Port         string
 	DBURL        string
 	JWT_SECRET   string
+	FrontendURL  string
 	CookieSecure bool
 }
 
@@ -20,6 +21,7 @@ func Load() Config {
 		Port:         get("PORT", "8080"),
 		DBURL:        get("DB_URL", "postgres://postgres:postgres@localhost:5432/login_with_go_vue?sslmode=disable"),
 		JWT_SECRET:   get("JWT_SECRET", "dev-secret"),
+		FrontendURL:  get("FRONTEND_URL", "http://localhost:5173"),
 		CookieSecure: getBool("COOKIE_SECURE", false),
 	}
 }

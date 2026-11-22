@@ -2,10 +2,14 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/thanunbenz/login_with_go_vue/backend/internal/model"
 	"github.com/thanunbenz/login_with_go_vue/backend/internal/repository"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -19,12 +23,24 @@ const (
 )
 
 type AuthService struct {
-	repo   *repository.UserRepo
-	secret []byte
+	users         userRepository
+	refreshTokens refreshTokenRepository
+	secret        []byte
 }
 
-func NewAuthService(repo *repository.UserRepo, secret string) *AuthService {
-	return &AuthService{repo: repo, secret: []byte(secret)}
+type userRepository interface {
+	CreateUser(context.Context, string, string) error
+	GetUserByUsername(context.Context, string) (*model.User, error)
+}
+
+type refreshTokenRepository interface {
+	Create(context.Context, int, []byte, time.Time) error
+	Rotate(context.Context, []byte, []byte, time.Time) (int, string, error)
+	Delete(context.Context, []byte) error
+}
+
+func NewAuthService(users userRepository, refreshTokens refreshTokenRepository, secret string) *AuthService {
+	return &AuthService{users: users, refreshTokens: refreshTokens, secret: []byte(secret)}
 }
 
 func (s *AuthService) Register(ctx context.Context, username, password string) error {
@@ -32,11 +48,11 @@ func (s *AuthService) Register(ctx context.Context, username, password string) e
 	if err != nil {
 		return err
 	}
-	return s.repo.CreateUser(ctx, username, string(hash))
+	return s.users.CreateUser(ctx, username, string(hash))
 }
 
 func (s *AuthService) Login(ctx context.Context, username, password string) (string, string, error) {
-	user, err := s.repo.GetUserByUsername(ctx, username)
+	user, err := s.users.GetUserByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return "", "", ErrUserPassword
@@ -47,41 +63,69 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (str
 		return "", "", ErrUserPassword
 	}
 
-	accessToken, err := s.newToken(user.ID, user.Username, "access", accessTokenLife)
+	accessToken, err := s.newToken(user.ID, user.Username, accessTokenLife)
 	if err != nil {
 		return "", "", err
 	}
-	refreshToken, err := s.newToken(user.ID, user.Username, "refresh", refreshTokenLife)
-	return accessToken, refreshToken, err
+	refreshToken, refreshHash, err := newRefreshToken()
+	if err != nil {
+		return "", "", err
+	}
+	if err := s.refreshTokens.Create(ctx, user.ID, refreshHash, time.Now().Add(refreshTokenLife)); err != nil {
+		return "", "", err
+	}
+	return accessToken, refreshToken, nil
 }
 
-func (s *AuthService) Refresh(refreshToken string) (string, error) {
-	token, err := jwt.Parse(refreshToken, func(t *jwt.Token) (any, error) {
-		return s.secret, nil
-	}, jwt.WithValidMethods([]string{"HS256"}))
-	if err != nil || !token.Valid {
-		return "", ErrInvalidRefreshToken
+func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (string, string, error) {
+	newToken, newHash, err := newRefreshToken()
+	if err != nil {
+		return "", "", err
+	}
+	userID, username, err := s.refreshTokens.Rotate(
+		ctx,
+		refreshTokenHash(refreshToken),
+		newHash,
+		time.Now().Add(refreshTokenLife),
+	)
+	if errors.Is(err, repository.ErrInvalidRefreshToken) {
+		return "", "", ErrInvalidRefreshToken
+	}
+	if err != nil {
+		return "", "", err
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || claims["type"] != "refresh" {
-		return "", ErrInvalidRefreshToken
-	}
-	uid, uidOK := claims["uid"].(float64)
-	username, usernameOK := claims["username"].(string)
-	if !uidOK || !usernameOK {
-		return "", ErrInvalidRefreshToken
-	}
-
-	return s.newToken(int(uid), username, "access", accessTokenLife)
+	accessToken, err := s.newToken(userID, username, accessTokenLife)
+	return accessToken, newToken, err
 }
 
-func (s *AuthService) newToken(userID int, username, tokenType string, lifetime time.Duration) (string, error) {
+func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
+	if refreshToken == "" {
+		return nil
+	}
+	return s.refreshTokens.Delete(ctx, refreshTokenHash(refreshToken))
+}
+
+func (s *AuthService) newToken(userID int, username string, lifetime time.Duration) (string, error) {
 	claims := jwt.MapClaims{
 		"uid":      userID,
 		"username": username,
-		"type":     tokenType,
+		"type":     "access",
 		"exp":      time.Now().Add(lifetime).Unix(),
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.secret)
+}
+
+func newRefreshToken() (string, []byte, error) {
+	value := make([]byte, 32)
+	if _, err := rand.Read(value); err != nil {
+		return "", nil, err
+	}
+	token := base64.RawURLEncoding.EncodeToString(value)
+	return token, refreshTokenHash(token), nil
+}
+
+func refreshTokenHash(token string) []byte {
+	hash := sha256.Sum256([]byte(token))
+	return hash[:]
 }

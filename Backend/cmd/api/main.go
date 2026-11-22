@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"os"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -21,7 +20,7 @@ func main() {
 		ErrorHandler: handler.ErrorHandler,
 	})
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:5173",
+		AllowOrigins:     cfg.FrontendURL,
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
 		AllowCredentials: true,
 	}))
@@ -32,8 +31,9 @@ func main() {
 	}
 	defer pool.Close()
 
-	repo := repository.NewUserRepo(pool)
-	svc := service.NewAuthService(repo, cfg.JWT_SECRET)
+	users := repository.NewUserRepo(pool)
+	refreshTokens := repository.NewRefreshTokenRepo(pool)
+	svc := service.NewAuthService(users, refreshTokens, cfg.JWT_SECRET)
 	h := handler.NewAuthHandler(svc, cfg.CookieSecure)
 
 	api := app.Group("/api")
@@ -47,9 +47,5 @@ func main() {
 	v1.Post("/logout", h.Logout)
 	v1.Get("/me", middleware.JWT(cfg.JWT_SECRET), h.Me)
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-	app.Listen(":" + port)
+	app.Listen(":" + cfg.Port)
 }

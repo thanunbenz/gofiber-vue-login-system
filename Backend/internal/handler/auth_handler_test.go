@@ -22,7 +22,7 @@ func TestRefreshCookieSecurity(t *testing.T) {
 		t.Fatal(err)
 	}
 	cookie := strings.ToLower(response.Header.Get("Set-Cookie"))
-	for _, attribute := range []string{"httponly", "secure", "samesite=lax", "path=/"} {
+	for _, attribute := range []string{"__host-refresh_token=", "httponly", "secure", "samesite=lax", "path=/"} {
 		if !strings.Contains(cookie, attribute) {
 			t.Fatalf("refresh cookie is missing %s: %s", attribute, cookie)
 		}

@@ -2,6 +2,7 @@ import axios from 'axios'
 
 const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1'
 let accessToken = ''
+let refreshRequest: Promise<void> | null = null
 
 export const api = axios.create({
 	baseURL,
@@ -39,10 +40,15 @@ export function hasAccessToken() {
 }
 
 export async function refreshAccessToken() {
-	const { data } = await axios.post(`${baseURL}/refresh`, undefined, {
-		withCredentials: true,
-	})
-	setAccessToken(data.token)
+	if (!refreshRequest) {
+		refreshRequest = axios
+			.post(`${baseURL}/refresh`, undefined, { withCredentials: true })
+			.then(({ data }) => setAccessToken(data.token))
+			.finally(() => {
+				refreshRequest = null
+			})
+	}
+	return refreshRequest
 }
 
 export const errMsg = (e: any): string =>
