@@ -2,7 +2,7 @@ package handler
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -15,7 +15,7 @@ func ErrorHandler(c *fiber.Ctx, err error) error {
 	if errors.As(err, &fe) {
 		code, msg = fe.Code, fe.Message
 	} else {
-		log.Println("error:", err)
+		slog.Error("request failed", "error", err)
 	}
 	return c.Status(code).JSON(fiber.Map{"error": msg})
 }

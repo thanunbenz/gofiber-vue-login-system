@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -15,6 +16,9 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
 	cfg := config.Load()
 	app := fiber.New(fiber.Config{
 		ErrorHandler: handler.ErrorHandler,
@@ -27,9 +31,11 @@ func main() {
 	ctx := context.Background()
 	pool, err := database.Connect(ctx, cfg.DBURL)
 	if err != nil {
-		log.Fatal("db connect: ", err)
+		slog.Error("database connection failed", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
+	slog.Info("database connected")
 
 	users := repository.NewUserRepo(pool)
 	refreshTokens := repository.NewRefreshTokenRepo(pool)
@@ -47,5 +53,9 @@ func main() {
 	v1.Post("/logout", h.Logout)
 	v1.Get("/me", middleware.JWT(cfg.JWT_SECRET), h.Me)
 
-	app.Listen(":" + cfg.Port)
+	slog.Info("server starting", "port", cfg.Port)
+	if err := app.Listen(":" + cfg.Port); err != nil {
+		slog.Error("server stopped", "error", err)
+		os.Exit(1)
+	}
 }
